@@ -74,6 +74,24 @@ services:
     - INSECURENET_HOST_IP=${INSECURENET_HOST_IP}
     - NATS_SURVEYOR_SERVERS=${NATS_SURVEYOR_SERVERS}
 
+  go-processor-tpphase1:
+    build: ./dockers/go-processor-tpphase1
+    init: true
+    container_name: go-processor-tpphase1
+    networks:
+      intnet:
+    command: ['/bin/bash', '/config/configure-processor.sh']
+    volumes:
+      - ./config:/config
+      - ./code/go-processor-tpphase1:/code/go-processor-tpphase1
+    environment:
+      - SECURE_NET=${SECURE_NET}
+      - SECURENET_GATEWAY=${SECURENET_GATEWAY}
+      - INSECURE_NET=${INSECURE_NET}
+      - INSECURENET_GATEWAY=${INSECURENET_GATEWAY}
+      - SECURENET_HOST_IP=${SECURENET_HOST_IP}
+      - INSECURENET_HOST_IP=${INSECURENET_HOST_IP}
+      - NATS_SURVEYOR_SERVERS=${NATS_SURVEYOR_SERVERS}
 
   python-processor:
     build: ./dockers/python-processor
