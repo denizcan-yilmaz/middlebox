@@ -14,7 +14,6 @@ import (
 func addRandomDelay() {
 	// setting the mean delay from lambda
 	lambda := 1 / (0.05)
-	rand.Seed(time.Now().UnixNano())
 	delaySec := rand.ExpFloat64() / lambda
 
 	delayDuration := time.Duration(delaySec * float64(time.Second))
