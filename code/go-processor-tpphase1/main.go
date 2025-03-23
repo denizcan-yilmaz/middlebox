@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	// "math/rand"
+	"math/rand"
 	"os"
 	"time"
 
@@ -12,19 +12,14 @@ import (
 )
 
 func addRandomDelay() {
-	delayStr := os.Getenv("PACKET_DELAY_MS")
-	if delayStr == "" {
-		delayStr = "20"
-	}
+	// setting the mean delay from lambda
+	lambda := 1 / (0.05)
+	rand.Seed(time.Now().UnixNano())
+	delaySec := rand.ExpFloat64() / lambda
 
-	delayMs, err := time.ParseDuration(delayStr + "ms")
-	if err != nil {
-		fmt.Println("Invalid delay value, using default 20ms")
-		delayMs = 20 * time.Millisecond
-	}
-
-	time.Sleep(delayMs)
-	fmt.Printf("Packet delayed by: %v\n", delayMs)
+	delayDuration := time.Duration(delaySec * float64(time.Second))
+	time.Sleep(delayDuration)
+	fmt.Printf("Random delay: %v\n", delayDuration)
 }
 
 // Function to process the ethernet packet
@@ -32,7 +27,6 @@ func processEthernetPacket(nc *nats.Conn, iface string, data []byte) {
 	// Add your ethernet packet processing logic here
 	fmt.Printf("Processing ethernet packet: %s\n", iface)
 
-	// Introduce a random delay before processing
 	addRandomDelay()
 
 	// Use gopacket to dissect the packet
