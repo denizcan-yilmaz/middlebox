@@ -1,0 +1,103 @@
+import os, sys, time, argparse, signal, csv, pathlib
+from datetime import datetime
+from collections import Counter
+from scapy.all import sniff, IP, UDP, raw
+
+def count_nops(pkt) -> int:
+    ihl = pkt[IP].ihl
+    return 0 if ihl <= 5 else raw(pkt[IP])[20:20 + (ihl - 5) * 4].count(0x01)
+
+def bits_to_text(symbols, bits_per_symbol):
+    bitstr = ''.join(f'{s:0{bits_per_symbol}b}' for s in symbols)
+    bitstr = bitstr[: len(bitstr) - (len(bitstr) % 8)]        
+    return ''.join(chr(int(bitstr[i:i+8], 2))                 
+                    for i in range(0, len(bitstr), 8)).rstrip('\x00')
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="Capture this many messages before quitting")
+    ap.add_argument("--nop-bits", dest="nop_bits", type=int, default=3,
+                    help="Bits per symbol (max 5)")
+    ap.add_argument("--pps", type=int, default=1,
+                    help="Packets per symbol expected")
+    ap.add_argument("--port", type=int, default=8888)
+    ap.add_argument("--timeout", type=int, default=60)
+    ap.add_argument("-i", "--iface", default=os.getenv("SNIFF_IFACE", "eth0"))
+    args = ap.parse_args()
+
+    if args.nop_bits > 5:
+        sys.exit("receiver supports ≤ 5 bits per symbol")
+
+    START, END = (1 << args.nop_bits), (1 << args.nop_bits) + 1
+
+    csv_name = "receiver_log.csv"
+    if not pathlib.Path(csv_name).exists():
+        with open(csv_name, "w", newline="") as f:
+            csv.writer(f).writerow(
+                ["run_idx","nop_bits","pps","port","iface",
+                 "bits","duration","bps","message","timestamp"]
+            )
+
+    runs, state, pkbuf, symbols, t0 = 0, "waiting", [], [], None
+    done = {"stop": False}
+
+    def finish():
+        nonlocal runs, symbols, t0
+        if not symbols:
+            return
+        runs += 1
+        dur  = time.time() - t0
+        bits = len(symbols) * args.nop_bits
+        bps  = bits / dur
+        msg  = bits_to_text(symbols, args.nop_bits)
+        print(f"[run {runs}/{args.repeat}] {bits} bits in {dur:.2f}s → {bps:.2f} bps  msg={msg!r}")
+
+        with open(csv_name, "a", newline="") as f:
+            csv.writer(f).writerow(
+                [runs, args.nop_bits, args.pps, args.port, args.iface,
+                bits, f"{dur:.4f}", f"{bps:.2f}", msg,
+                datetime.now().isoformat()]
+            )
+
+        symbols.clear()
+
+        if runs >= args.repeat:
+            done["stop"] = True
+        else:
+            signal.alarm(args.timeout)
+
+    def handler(pkt):
+        nonlocal state, pkbuf, symbols, t0
+        if UDP not in pkt or pkt[UDP].dport != args.port:
+            return
+        val = count_nops(pkt)
+
+        if state == "waiting":
+            if val == START:
+                state, pkbuf, symbols, t0 = "recv", [], [], time.time()
+        elif state == "recv":
+            if val == END:
+                state = "waiting"
+                finish()
+                return
+            if val in (START, END):        
+                return
+            pkbuf.append(val)
+            while len(pkbuf) >= args.pps:
+                block = pkbuf[: args.pps]
+                symbols.append(Counter(block).most_common(1)[0][0])
+                del pkbuf[: args.pps]
+
+    signal.signal(signal.SIGALRM, lambda *_: done.__setitem__("stop", True))
+    signal.alarm(args.timeout)
+
+    print(f"[*] Sniffing UDP/{args.port} on {args.iface}")
+    sniff(iface=args.iface,
+          filter=f"udp and port {args.port}",
+          prn=handler,
+          store=False,
+          stop_filter=lambda *_: done["stop"])
+
+if __name__ == "__main__":
+    main()
