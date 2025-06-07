@@ -40,6 +40,7 @@ def main():
             )
 
     runs, state, pkbuf, symbols, t0 = 0, "waiting", [], [], None
+    start_seen, end_seen = 0, 0
     done = {"stop": False}
 
     def finish():
@@ -68,21 +69,31 @@ def main():
             signal.alarm(args.timeout)
 
     def handler(pkt):
-        nonlocal state, pkbuf, symbols, t0
+        nonlocal state, pkbuf, symbols, t0, start_seen, end_seen
+
         if UDP not in pkt or pkt[UDP].dport != args.port:
             return
         val = count_nops(pkt)
 
         if state == "waiting":
             if val == START:
-                state, pkbuf, symbols, t0 = "recv", [], [], time.time()
-        elif state == "recv":
+                start_seen += 1
+                if start_seen == 3:
+                    state, pkbuf, symbols = "recv", [], []
+                    t0 = time.time()
+            return
+
+        if state == "recv":
             if val == END:
-                state = "waiting"
-                finish()
+                end_seen += 1
+                if end_seen == 3:
+                    state       = "waiting"
+                    finish()
                 return
-            if val in (START, END):        
+
+            if val in (START, END):
                 return
+
             pkbuf.append(val)
             while len(pkbuf) >= args.pps:
                 block = pkbuf[: args.pps]
@@ -93,11 +104,16 @@ def main():
     signal.alarm(args.timeout)
 
     print(f"[*] Sniffing UDP/{args.port} on {args.iface}")
-    sniff(iface=args.iface,
-          filter=f"udp and port {args.port}",
-          prn=handler,
-          store=False,
-          stop_filter=lambda *_: done["stop"])
+    sec_ip = os.getenv("SECURENET_HOST_IP", "10.0.0.20")
+    pcap_filter = f"udp and port {args.port} and src host {sec_ip}"
+
+    sniff(
+        iface=args.iface,
+        filter=pcap_filter,
+        prn=handler,
+        store=False,
+        stop_filter=lambda *_: done["stop"]
+)
 
 if __name__ == "__main__":
     main()
