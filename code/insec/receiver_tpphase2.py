@@ -81,6 +81,7 @@ def main():
                 if start_seen == 3:
                     state, pkbuf, symbols = "recv", [], []
                     t0 = time.time()
+                    start_seen = 0
             return
 
         if state == "recv":
@@ -88,6 +89,7 @@ def main():
                 end_seen += 1
                 if end_seen == 3:
                     state       = "waiting"
+                    end_seen    = 0
                     finish()
                 return
 
