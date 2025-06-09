@@ -21,6 +21,8 @@ def main():
                     help="Bits per symbol (max 5)")
     ap.add_argument("--pps", type=int, default=1,
                     help="Packets per symbol expected")
+    ap.add_argument("--done-flag", default="",
+                    help="Touch this file when message completes")    
     ap.add_argument("--port", type=int, default=8888)
     ap.add_argument("--timeout", type=int, default=60)
     ap.add_argument("-i", "--iface", default=os.getenv("SNIFF_IFACE", "eth0"))
@@ -55,12 +57,14 @@ def main():
         print(f"[run {runs}/{args.repeat}] {bits} bits in {dur:.2f}s → {bps:.2f} bps  msg={msg!r}")
 
         with open(csv_name, "a", newline="") as f:
-            csv.writer(f).writerow(
-                [runs, args.nop_bits, args.pps, args.port, args.iface,
-                bits, f"{dur:.4f}", f"{bps:.2f}", msg,
-                datetime.now().isoformat()]
-            )
+             csv.writer(f).writerow(
+                 [runs, args.nop_bits, args.pps, args.port, args.iface,
+                 bits, f"{dur:.4f}", f"{bps:.2f}", msg,
+                 datetime.now().isoformat()]
+             )
 
+        if args.done_flag:
+            pathlib.Path(args.done_flag).touch()
         symbols.clear()
 
         if runs >= args.repeat:
