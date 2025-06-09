@@ -10,6 +10,7 @@ FLAG_FILE  = "/tmp/channel_flag"
 RUN_FILE   = "/tmp/run_id"
 CFG_FILE   = "/tmp/config_str"
 RAW_CSV    = "/tmp/logs_raw.csv"
+DELAY_FILE = "/tmp/delay_sec"
 
 det = SlidingEntropyDetector(
     win_sec     = float(os.getenv("DET_WIN_SEC",  "2")),
@@ -21,7 +22,7 @@ det = SlidingEntropyDetector(
 if not os.path.exists(RAW_CSV):
     with open(RAW_CSV, "w", newline="") as f:
         csv.writer(f).writerow(
-            ["ts","run","truth","pred","config","src","dst","proto"]
+            ["ts","run","truth","pred","config","delay","src","dst","proto"]        
         )
 
 async def make_handler(nc: NATS):
@@ -35,6 +36,7 @@ async def make_handler(nc: NATS):
         truth  = int(open(FLAG_FILE).read().strip())   if os.path.exists(FLAG_FILE) else 0
         run_id = int(open(RUN_FILE ).read().strip())   if os.path.exists(RUN_FILE ) else 0
         cfg    =     open(CFG_FILE ).read().strip()    if os.path.exists(CFG_FILE ) else "unknown"
+        delay  = float(open(DELAY_FILE).read().strip()) if os.path.exists(DELAY_FILE) else -1
 
         pred   = int(det.feed(pkt))
         ts     = time.time()
@@ -44,9 +46,9 @@ async def make_handler(nc: NATS):
         l4name = pkt.payload.__class__.__name__
         with open(RAW_CSV, "a", newline="") as f:
             csv.writer(f).writerow(
-                [f"{ts:.6f}", run_id, truth, pred, cfg, ip_src, ip_dst, l4name]
-            )
-
+                [f"{ts:.6f}", run_id, truth, pred, cfg, delay, ip_src, ip_dst, l4name]
+        )        
+        
         print(f"LOG {ts:.3f} {run_id} {truth} {pred} {cfg}")
 
         if pred:

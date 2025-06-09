@@ -40,7 +40,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repeat", type=int, default=1,
                     help="Run this configuration N times")
-    ap.add_argument("--message", default="Hello from SEC!")
+    ap.add_argument("--message", default="Hello, InSecureNet!")
     ap.add_argument("--nop-bits",  dest="nop_bits", type=int, default=3,
                     help="Bits per symbol (max 5)")
     ap.add_argument("--delay",     type=float, default=0.1,
