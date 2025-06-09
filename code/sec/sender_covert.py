@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, argparse, random, csv, pathlib
+import os, sys, time, argparse, random, csv, pathlib, hashlib
 from datetime import datetime
 from scapy.all import IP, UDP, Raw, send
 
@@ -31,10 +31,11 @@ def send_once(cfg):
     symbols = text_to_symbols(cfg.message, cfg.nop_bits)
 
     # helper to scramble/descramble a symbol
-    def make_mask(idx):
-        rnd = random.Random(hash((SESSION_KEY, idx)) & 0xFFFFFFFF)
-        return rnd.randrange(1 << cfg.nop_bits)
-
+    def make_mask(idx: int, bits: int) -> int:
+        data = SESSION_KEY + str(idx).encode()
+        digest = hashlib.sha256(data).digest()
+        return int.from_bytes(digest, byteorder='big') % (1 << bits)
+    
     def pkt(sym, tag=b"DATA"):
         return (IP(dst=cfg.target_ip, options=build_opts(sym))
                 / UDP(sport=random.randint(1024, 65535), dport=cfg.port)
@@ -49,7 +50,7 @@ def send_once(cfg):
 
     # send data symbols (scrambled)
     for idx, s in enumerate(symbols):
-        masked = s ^ make_mask(idx)
+        masked = s ^ make_mask(idx, cfg.nop_bits)  # ✅ Correct
         for _ in range(cfg.pps):
             send(pkt(masked), iface=cfg.iface, verbose=False)
             jitter = random.gauss(0, 0.3 * cfg.delay)

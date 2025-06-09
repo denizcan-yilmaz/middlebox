@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import os, sys, time, argparse, signal, csv, pathlib, random
+import os, sys, time, argparse, signal, csv, pathlib, random, hashlib
 from datetime import datetime
 from collections import Counter
 from scapy.all import sniff, IP, UDP, raw
@@ -7,20 +7,26 @@ from scapy.all import sniff, IP, UDP, raw
 # ── SCRAMBLE SETTINGS (must match sender) ─────────────────────────────────
 SESSION_KEY = b"2444172"
 def make_mask(idx: int, bits: int) -> int:
-    rnd = random.Random(hash((SESSION_KEY, idx)) & 0xFFFFFFFF)
-    return rnd.randrange(1 << bits)
+    data = SESSION_KEY + str(idx).encode()
+    digest = hashlib.sha256(data).digest()
+    return int.from_bytes(digest, byteorder='big') % (1 << bits)
 
 def count_nops(pkt) -> int:
-    ihl = pkt[IP].ihl
-    if ihl <= 5:
+    if not pkt.haslayer(IP):
         return 0
-    # Extract the options bytes
-    opts = raw(pkt[IP])[20 : 20 + (ihl - 5) * 4]
-    # Strip fake Timestamp if present
-    if opts.startswith(b"\x44\x04"):
-        opts = opts[4:]
-    # Count only NOPs
-    return opts.count(0x01)
+        
+    # Extract options more reliably
+    ip_layer = pkt[IP]
+    if ip_layer.ihl <= 5:
+        return 0
+        
+    options = raw(ip_layer)[4*5:4*ip_layer.ihl]
+    
+    # Handle timestamp option
+    if len(options) >= 4 and options[0] == 0x44:
+        options = options[4:]
+        
+    return options.count(0x01)
 
 def bits_to_text(symbols, bits_per_symbol):
     bitstr = ''.join(f'{s:0{bits_per_symbol}b}' for s in symbols)
